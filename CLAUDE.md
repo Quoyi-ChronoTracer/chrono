@@ -69,12 +69,15 @@ All Claude Code config lives in `.claude/` in this repo and is shared across the
 
 ```
 .claude/
-├── settings.json          # Shared permissions baseline (committed)
-├── settings.local.json    # Per-engineer overrides (gitignored)
-├── commands/
-│   └── ship.md            # /ship — multi-repo branch/commit/push/PR
-└── agents/
-    └── code-reviewer.md   # Cross-stack code review agent
+├── settings.json              # Shared permissions baseline (committed)
+├── settings.local.json        # Per-engineer overrides (gitignored)
+├── skills/
+│   ├── ship/SKILL.md          # /ship — user-triggered multi-repo branch/commit/push/PR
+│   └── lean-docs/SKILL.md     # auto-invoked when editing any context doc
+├── agents/
+│   └── code-reviewer.md       # Cross-stack code review agent
+└── docs/                      # Component knowledge base (loaded on demand)
+    └── *.md
 ```
 
 ### `/ship <branch-name>`
