@@ -1,96 +1,95 @@
 ---
+name: ship
 description: User-invoked. Use /ship <branch-name> to branch, commit, push, and open PRs across all dirty submodules and the mono repo. Works from the mono repo root (multi-repo) or from inside a single component (single-repo).
+argument-hint: <branch-name>
 ---
+
+# Ship Changes
+
+Create branches, commit, push, and open PRs across all affected repos. Follow these conventions exactly.
 
 ## Arguments
-`$ARGUMENTS` — branch name (required). Optionally followed by a short description for
-the PR title. If a ticket number appears in the branch name (e.g. `APP-297`), use it in
-commit messages and PR titles.
 
----
+Parse from `$ARGUMENTS`:
+- Branch name (required, e.g. `ata/APP-297-pipeline-v2`)
 
-## Step 1 — Discover what's dirty
+If the branch name is missing, use `AskUserQuestion` to ask for it.
 
-**From the mono repo root (`/chrono`):**
-- `git status --short` in the parent to find root-level file changes and submodule ref changes
-- `git -C <path> status --short` for each submodule
-- Build:
-  - `DIRTY_SUBMODULES` — submodules with uncommitted changes (ignore `.DS_Store`-only diffs)
-  - `PARENT_CHANGES` — root-level changed files (CLAUDE.md, .gitmodules, .claude/, etc.)
+## Conventions
 
-**From inside a single component directory:**
-- Single-repo ship only. Skip parent repo update entirely.
+### Branch
+- Use the exact branch name provided — do not modify it
+- Create from current HEAD in each repo
 
----
+### Staging
+- Run `git status` in each dirty repo to review all changes
+- Stage all modified and new files that are part of the work
+- **Delete any scratch files, one-off scripts, or temporary artifacts** created during the session before staging — don't leave local bloat behind
+- Trust `.gitignore` to handle the rest
 
-## Step 2 — Confirm before acting
+### Commit Message
+- **Auto-generated** — run `git diff --cached` in each repo and analyze the staged diff to write the message
+- **Single line only** — no multi-line descriptions, no conventional commit prefixes (`chore:`, `feat:`, etc.)
+- **Present third-person tense** — e.g. "Migrates ship command to skills structure", "Adds OCR extraction step", "Fixes date parsing in event deduplicator"
+- Summarize the *what*, not the *why*
 
-Print a summary of which repos have changes, what files are affected, and the branch name
-that will be used. Pause and confirm with the user if anything looks unexpected.
+### Pull Request
+- **Title**: Same as the commit message
+- **Body**: Use this template:
 
----
-
-## Step 3 — Ship each dirty submodule
-
-For each repo in `DIRTY_SUBMODULES`:
-
-```bash
-cd <submodule-path>
-git checkout -b <branch-name> 2>/dev/null || git checkout <branch-name>
-git add -A
-git commit -m "<APP-XXX: Description in present third-person tense>"
-git push -u origin <branch-name>
-gh pr create \
-  --title "<APP-XXX: Description>" \
-  --body "$(cat <<'EOF'
+```markdown
 ## Summary
-<bullet points of what changed>
+<2-4 bullet points summarizing the changes at a high level>
 
-## Part of
-<links to related PRs in other components if applicable>
+## Changes
 
-🤖 Generated with [Claude Code](https://claude.ai/claude-code)
-EOF
-)" \
-  --base develop
+### <Component or Area>
+- <specific change>
+- <specific change>
+
+## Tests
+- <what test files were added/modified, or "No tests required — config/docs change">
+
+## Test plan
+- [ ] <feature-specific verification steps>
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
 ```
 
----
+- Base branch: `develop` for all submodule PRs. `main` for the mono repo PR.
+- Reviewers: always add `--reviewer ata-peppered,DexterW,jessicaribeiroalves,copilot` to every `gh pr create` call.
 
-## Step 4 — Update the parent repo
+## Procedure
 
-After all submodule PRs are created:
+### From the mono repo root (multi-repo ship)
 
-```bash
-cd <mono-repo-root>
-git checkout -b <branch-name> 2>/dev/null || git checkout <branch-name>
-git add <each-dirty-submodule-path>
-git add CLAUDE.md .claude/ README.md      # only files that actually changed
-git commit -m "chore: ships <branch-name> across [component list]"
-git push -u origin <branch-name>
-gh pr create \
-  --title "chore: <branch-name> — platform ref update" \
-  --body "$(cat <<'EOF'
-## Component PRs
-<list each PR with link>
+1. **Discover scope**: Run `git status --short` in the parent, then `git -C <path> status --short` for each submodule. Build `DIRTY_SUBMODULES` (ignore `.DS_Store`-only diffs) and `PARENT_CHANGES`.
 
-## Summary
-Updates submodule references and any shared AI tooling changes.
+2. **Confirm**: Print a summary of which repos have changes and what files are affected. Pause if anything looks unexpected.
 
-🤖 Generated with [Claude Code](https://claude.ai/claude-code)
-EOF
-)" \
-  --base main
-```
+3. **For each dirty submodule**:
+   - `git status` and `git diff` to review changes
+   - Delete any scratch files or temp artifacts
+   - `git checkout -b <branch-name>` (or switch if already exists)
+   - Stage relevant files
+   - `git diff --cached` to analyze the staged diff
+   - Write a single-line, present third-person commit message from the diff
+   - Commit and push
+   - `gh pr create` with the title, detailed body, base `develop`, and `--reviewer ata-peppered,DexterW,jessicaribeiroalves,copilot`
 
-Skip this step if there are no root-level changes and the submodule ref bump adds no
-meaningful value (e.g. a trivial single-component fix).
+4. **Update the mono repo** (if root-level files changed or submodule refs need bumping):
+   - Stage updated gitlinks and any changed root files (CLAUDE.md, .claude/, README.md)
+   - `git diff --cached` to analyze
+   - Write a single-line commit message summarizing the platform-level changes
+   - Commit, push, `gh pr create` with base `main`, `--reviewer ata-peppered,DexterW,jessicaribeiroalves,copilot` — include links to all component PRs in the body
 
----
-
-## Step 5 — Print summary
+5. **Report**: Print a summary table:
 
 | Repo | Branch | PR |
 |---|---|---|
 | chrono-app | feature/APP-XXX | https://github.com/... |
 | chrono (mono) | feature/APP-XXX | https://github.com/... |
+
+### From inside a single component directory
+
+Same procedure, single repo only. Skip step 4 entirely.
