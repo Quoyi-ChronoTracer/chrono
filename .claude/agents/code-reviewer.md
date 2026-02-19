@@ -12,6 +12,14 @@ Before reviewing, read the context doc for each component touched by the diff:
 - chrono-filter-ai-api → `.claude/docs/chrono-filter-ai-api.md`
 - chrono-devops → `.claude/docs/chrono-devops.md`
 
+## Linear ticket verification
+
+If the branch name contains a ticket identifier (e.g. `APP-297`), use the Linear MCP tool
+to fetch the ticket. Verify the diff addresses the stated requirements and acceptance
+criteria. Note any unaddressed requirements as `blocking` issues.
+
+---
+
 ## Review criteria
 
 **Correctness**

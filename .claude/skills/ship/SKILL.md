@@ -67,7 +67,12 @@ If the branch name is missing, use `AskUserQuestion` to ask for it.
 
 2. **Confirm**: Print a summary of which repos have changes and what files are affected. Pause if anything looks unexpected.
 
-3. **For each dirty submodule**:
+3. **Rebase on latest remote base branch**: Before committing or pushing anything, ensure every repo is up to date with its remote base branch. This prevents merge conflicts and stale refs in PRs.
+   - For each dirty submodule: `git fetch origin develop && git rebase origin/develop`
+   - For the parent mono repo: `git fetch origin main && git rebase origin/main`
+   - If a rebase has conflicts, stop and ask the user to resolve them. Never force-push or skip conflicts automatically.
+
+4. **For each dirty submodule**:
    - `git status` and `git diff` to review changes
    - Delete any scratch files or temp artifacts
    - `git checkout -b <branch-name>` (or switch if already exists)
@@ -77,13 +82,13 @@ If the branch name is missing, use `AskUserQuestion` to ask for it.
    - Commit and push
    - `gh pr create` with the title, detailed body, base `develop`, and `--reviewer ata-peppered,DexterW,jessicaribeiroalves,copilot`
 
-4. **Update the mono repo** (if root-level files changed or submodule refs need bumping):
+5. **Update the mono repo** (if root-level files changed or submodule refs need bumping):
    - Stage updated gitlinks and any changed root files (CLAUDE.md, .claude/, README.md)
    - `git diff --cached` to analyze
    - Write a single-line commit message summarizing the platform-level changes
    - Commit, push, `gh pr create` with base `main`, `--reviewer ata-peppered,DexterW,jessicaribeiroalves,copilot` — include links to all component PRs in the body
 
-5. **Report**: Print a summary table:
+6. **Report**: Print a summary table:
 
 | Repo | Branch | PR |
 |---|---|---|

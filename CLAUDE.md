@@ -68,11 +68,13 @@ git commit -m "chore: bumps chrono-app to latest develop"
 All Claude Code config lives in `.claude/` in this repo and is shared across the team.
 
 ```
+.mcp.json                  # MCP server declarations (Linear)
 .claude/
 ├── settings.json              # Shared permissions baseline (committed)
 ├── settings.local.json        # Per-engineer overrides (gitignored)
 ├── skills/
-│   ├── ship/SKILL.md          # /ship — user-triggered multi-repo branch/commit/push/PR
+│   ├── ship/SKILL.md          # /ship — multi-repo branch/commit/push/PR
+│   ├── ticket/SKILL.md        # /ticket — fetch Linear ticket, derive branch
 │   └── lean-docs/SKILL.md     # auto-invoked when editing any context doc
 ├── agents/
 │   └── code-reviewer.md       # Cross-stack code review agent
@@ -80,13 +82,30 @@ All Claude Code config lives in `.claude/` in this repo and is shared across the
     └── *.md
 ```
 
+### Linear MCP — first-time setup
+
+The project declares a Linear MCP server in `.mcp.json`. Each engineer authenticates once:
+
+1. Run `/mcp` in Claude Code
+2. The Linear server should appear in the list — select it to start OAuth
+3. Approve access in the browser. The token is stored in your system keychain and auto-refreshes.
+
+After setup, `/ship`, `/ticket`, and the code-reviewer agent can access Linear tickets natively.
+
 ### `/ship <branch-name>`
 
 From the mono repo root: detects all dirty submodules, creates matching branches, commits,
 pushes, and opens individual PRs in each component repo, then updates the parent's submodule
-refs and opens a PR there too.
+refs and opens a PR there too. When the branch name contains a ticket identifier (`APP-XXX`),
+fetches the Linear ticket to enrich PR titles and bodies, then moves the ticket to "In Review".
 
 From inside a single component directory: behaves as a single-repo ship.
+
+### `/ticket APP-XXX` or `/ticket <search terms>`
+
+Fetches a Linear ticket by identifier or keyword search. Displays ticket details (title, status,
+assignee, priority, description, acceptance criteria), derives a branch name following project
+convention, and optionally scaffolds `tasks/todo.md` from acceptance criteria.
 
 ---
 
