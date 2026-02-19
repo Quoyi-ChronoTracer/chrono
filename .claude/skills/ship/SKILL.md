@@ -1,8 +1,5 @@
-## When to use this skill
-Invoke `/ship <branch-name>` when changes are ready to commit and PR — either across
-multiple submodules from the mono repo root, or within a single component directory.
-Handles branching, committing, pushing, and opening PRs automatically.
-
+---
+description: User-invoked. Use /ship <branch-name> to branch, commit, push, and open PRs across all dirty submodules and the mono repo. Works from the mono repo root (multi-repo) or from inside a single component (single-repo).
 ---
 
 ## Arguments
@@ -67,7 +64,7 @@ After all submodule PRs are created:
 ```bash
 cd <mono-repo-root>
 git checkout -b <branch-name> 2>/dev/null || git checkout <branch-name>
-git add <each-dirty-submodule-path>       # updated gitlink refs
+git add <each-dirty-submodule-path>
 git add CLAUDE.md .claude/ README.md      # only files that actually changed
 git commit -m "chore: ships <branch-name> across [component list]"
 git push -u origin <branch-name>

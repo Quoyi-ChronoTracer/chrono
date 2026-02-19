@@ -1,9 +1,5 @@
-## When to use this skill
-Invoke `/lean-docs` any time you are about to **create or edit** a file that shapes Claude's
-context: `CLAUDE.md`, `.claude/docs/*.md`, `.claude/agents/*.md`, `.claude/commands/*.md`,
-or any `README.md` in this repo. Run it before writing, and again as a final review pass
-before saving.
-
+---
+description: Apply when creating or editing any file that shapes Claude's context — CLAUDE.md, .claude/docs/*.md, .claude/agents/*.md, .claude/skills/*/SKILL.md, or README.md. Enforces lean, reference-driven documentation.
 ---
 
 ## The Lean Docs Principle
@@ -34,38 +30,27 @@ For each piece of information you're about to add, ask:
 
 ## Splitting Context for Independent Agent Work
 
-Some information is too deep or too specific to belong in a general context doc, but is
-legitimately needed for certain tasks. The right pattern is to **split it into its own
-reference doc and note when an agent should load it**.
+Some information is too deep or specific for a general context doc, but legitimately needed
+for certain tasks. Split it into its own reference doc and note when an agent should load it.
 
-**When to split into a separate doc:**
-- The content is only needed for one category of task (e.g. "deep filter schema work",
-  "database migration authoring", "OCR pipeline tuning")
-- The content is large enough that loading it in every session would waste context budget
-- The task it supports is self-contained enough that a sub-agent could own it end-to-end
+**When to split:**
+- The content is only needed for one category of task (e.g. "deep filter schema work", "DB migration authoring", "OCR pipeline tuning")
+- The content is large enough that loading it every session wastes context budget
+- The task is self-contained enough that a sub-agent could own it end-to-end
 
-**How to reference it in the parent doc:**
+**How to reference in the parent doc:**
 ```markdown
 ## Deep Context (load when needed)
 - Filter payload schema (full) → `.claude/docs/filter-schema.md`
   _Load this when building, modifying, or debugging event filters._
 - DB migration authoring → `.claude/docs/db-migrations.md`
-  _Load this when writing or reviewing SQL migrations for chrono-api._
+  _Spawn a sub-agent with this doc when writing or reviewing SQL migrations._
 ```
-
-**How to annotate agent-worthy tasks:**
-If a section of work is cleanly delegatable, say so explicitly:
-```markdown
-- OCR benchmark analysis → `.claude/docs/ocr-benchmarks.md`
-  _Spawn a sub-agent with this doc when asked to evaluate or compare OCR approaches._
-```
-
-This way the main context stays lean, Claude knows exactly what to load for a given task,
-and complex sub-tasks can be handed to focused agents without polluting the parent context.
 
 ---
 
 ## Final review pass
+
 Read back every line you've written. If removing it wouldn't cause Claude to make a
 mistake, remove it. The goal is the smallest doc that gives Claude everything it truly
 needs and nothing it can get elsewhere.
