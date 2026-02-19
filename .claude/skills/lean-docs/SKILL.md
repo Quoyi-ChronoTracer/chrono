@@ -49,6 +49,30 @@ for certain tasks. Split it into its own reference doc and note when an agent sh
 
 ---
 
+## Intelligence vs Mechanics: Keep Logic in Code
+
+When a skill or procedure involves both intelligent decisions and deterministic operations,
+split them. Never put mechanics in context docs.
+
+**Intelligence** (belongs in the skill/context — only Claude can do this):
+- Analysing diffs and understanding what changed
+- Writing commit messages, PR descriptions, summaries
+- Deciding which files matter vs which are scratch
+- Judgment calls, edge case handling, confirmations
+
+**Mechanics** (belongs in a script — a shell script does this better):
+- Git operations: branching, staging, committing, pushing
+- File I/O, API calls, process orchestration
+- Anything deterministic and repeatable
+
+Mechanics in context = bloat and inconsistency. Put them in `.claude/scripts/` and have
+the skill call the script. The skill shrinks to: **[gather intelligence] → [write a plan/args] → [run script]**.
+
+Hooks follow the same principle: logic that should fire automatically in response to an
+event belongs in `.claude/hooks/` as a script, not as instructions in a skill.
+
+---
+
 ## Final review pass
 
 Read back every line you've written. If removing it wouldn't cause Claude to make a
