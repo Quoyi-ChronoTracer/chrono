@@ -1,0 +1,11 @@
+# macOS
+.DS_Store
+
+# Claude Code — per-engineer local settings (never shared)
+.claude/settings.local.json
+
+# Legacy v1 pipeline — not a submodule
+chrono-pipeline/
+
+# Cursor IDE
+.cursor/

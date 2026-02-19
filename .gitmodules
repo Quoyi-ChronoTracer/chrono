@@ -1,0 +1,24 @@
+[submodule "chrono-app"]
+	path = chrono-app
+	url = https://github.com/Quoyi-ChronoTracer/chrono-app.git
+	branch = develop
+
+[submodule "chrono-api"]
+	path = chrono-api
+	url = https://github.com/Quoyi-ChronoTracer/chrono-api.git
+	branch = develop
+
+[submodule "chrono-pipeline-v2"]
+	path = chrono-pipeline-v2
+	url = https://github.com/Quoyi-ChronoTracer/chrono-pipeline-v2.git
+	branch = develop
+
+[submodule "chrono-filter-ai-api"]
+	path = chrono-filter-ai-api
+	url = https://github.com/Quoyi-ChronoTracer/chrono-filter-ai-api.git
+	branch = develop
+
+[submodule "chrono-devops"]
+	path = chrono-devops
+	url = https://github.com/Quoyi-ChronoTracer/chrono-devops.git
+	branch = develop
