@@ -22,9 +22,9 @@
 #
 # PRE-FLIGHT:
 #   The Claude Code PreToolUse hook (.claude/hooks/pre-ship.sh) intercepts
-#   this script's invocation and runs the test gate (.claude/scripts/
-#   pre-ship-tests.sh) before this script ever executes. If any dirty repo's
-#   tests fail, this script is blocked entirely.
+#   this script's invocation and runs the test gate (.claude/scripts/test.sh)
+#   before this script ever executes. If any dirty repo's tests fail, this
+#   script is blocked entirely.
 #
 # INPUT:
 #   Reads .claude/tmp/ship-plan.json — written by the /ship skill.
@@ -75,11 +75,15 @@ BRANCH=$(jq -r '.branch // ""' "$PLAN_FILE")
 [ -n "$BRANCH" ] || fail "'branch' is missing from ship-plan.json"
 
 REPO_COUNT=$(jq '.repos | length' "$PLAN_FILE")
-[ "$REPO_COUNT" -gt 0 ] || fail "'repos' array is empty in ship-plan.json"
+MONO_MSG=$(jq -r '.monoMessage // ""' "$PLAN_FILE")
 
 echo ""
 echo "Shipping branch: $BRANCH"
-echo "Repos:           $(jq -r '[.repos[].name] | join(", ")' "$PLAN_FILE")"
+if [ "$REPO_COUNT" -gt 0 ]; then
+  echo "Repos:           $(jq -r '[.repos[].name] | join(", ")' "$PLAN_FILE")"
+else
+  echo "Repos:           (none — mono repo root only)"
+fi
 
 # ---------------------------------------------------------------------------
 # Track results across repos for the final summary
@@ -93,7 +97,7 @@ declare -a FAILED_NAMES=()   # repo names that failed
 # Ship each submodule listed in the plan
 # ---------------------------------------------------------------------------
 
-for i in $(seq 0 $(( REPO_COUNT - 1 ))); do
+for i in $([ "$REPO_COUNT" -gt 0 ] && seq 0 $(( REPO_COUNT - 1 )) || true); do
   REPO_NAME=$(jq -r ".repos[$i].name" "$PLAN_FILE")
   COMMIT_MSG=$(jq -r ".repos[$i].message // \"\"" "$PLAN_FILE")
   REPO_PATH="$MONO_ROOT/$REPO_NAME"
@@ -205,11 +209,30 @@ if [ -n "$PARENT_CHANGES" ]; then
 
   git add -A
 
-  # Build a short component list for the commit message
-  SHIPPED_LIST=$(IFS=', '; echo "${SHIPPED_NAMES[*]}")
+  # Restore any submodule paths that we did NOT ship — git add -A would
+  # otherwise stage their ref bumps, accidentally advancing their recorded
+  # commits in the mono repo without an intentional ship of those repos.
+  ALL_SUBMODULES=("chrono-app" "chrono-api" "chrono-pipeline-v2" "chrono-filter-ai-api" "chrono-devops")
+  for submod in "${ALL_SUBMODULES[@]}"; do
+    if [[ ! " ${SHIPPED_NAMES[*]+"${SHIPPED_NAMES[*]}"} " =~ " $submod " ]]; then
+      git restore --staged "$submod" 2>/dev/null || true
+    fi
+  done
 
-  git commit -m "Updates submodule refs and ships $BRANCH across $SHIPPED_LIST"
-  ok "Committed mono repo ref updates"
+  # Build a short component list for the commit message
+  SHIPPED_LIST=$(IFS=', '; echo "${SHIPPED_NAMES[*]+"${SHIPPED_NAMES[*]}"}")
+
+  # Use monoMessage from the plan if provided; fall back to an auto-generated one
+  if [ -n "$MONO_MSG" ]; then
+    FINAL_MONO_MSG="$MONO_MSG"
+  elif [ -n "$SHIPPED_LIST" ]; then
+    FINAL_MONO_MSG="Updates submodule refs and ships $BRANCH across $SHIPPED_LIST"
+  else
+    FINAL_MONO_MSG="Updates AI tooling on $BRANCH"
+  fi
+
+  git commit -m "$FINAL_MONO_MSG"
+  ok "Committed: $FINAL_MONO_MSG"
 
   git push -u origin "$BRANCH"
   ok "Pushed to origin/$BRANCH"
@@ -222,8 +245,9 @@ if [ -n "$PARENT_CHANGES" ]; then
     COMPONENT_PR_LIST+="- **$RNAME**: $RURL"$'\n'
   done
 
+  MONO_PR_TITLE="${FINAL_MONO_MSG}"
   MONO_PR_URL=$(gh pr create \
-    --title "Ships $BRANCH — bumps submodule refs ($SHIPPED_LIST)" \
+    --title "$MONO_PR_TITLE" \
     --body "$(cat <<EOF
 ## Component PRs
 $COMPONENT_PR_LIST

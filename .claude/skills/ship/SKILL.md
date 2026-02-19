@@ -42,6 +42,7 @@ Create `.claude/tmp/ship-plan.json` with the branch and one message per dirty re
 ```json
 {
   "branch": "<branch-name>",
+  "monoMessage": "<optional: commit message for the mono repo commit>",
   "repos": [
     { "name": "chrono-app",  "message": "<commit message>" },
     { "name": "chrono-api",  "message": "<commit message>" }
@@ -49,7 +50,8 @@ Create `.claude/tmp/ship-plan.json` with the branch and one message per dirty re
 }
 ```
 
-Only include repos that actually have tracked-file changes.
+- `repos`: only include repos that actually have tracked-file changes. Can be empty `[]` when changes are mono root only.
+- `monoMessage`: include when repos is empty or when the auto-generated message ("Updates submodule refs…") wouldn't describe the change accurately.
 
 ### 6. Run the script
 ```bash
