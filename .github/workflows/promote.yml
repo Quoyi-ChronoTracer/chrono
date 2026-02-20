@@ -86,12 +86,21 @@ jobs:
     needs: approve
     runs-on: ubuntu-latest
     steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.DEPLOY_APP_ID }}
+          private-key: ${{ secrets.DEPLOY_APP_PRIVATE_KEY }}
+          owner: Quoyi-ChronoTracer
+          repositories: chrono-devops,chrono-api,chrono-pipeline-v2,chrono-app,chrono-filter-ai-api
+
       - name: Push tags to component repos
         env:
           MATRIX: ${{ needs.validate.outputs.matrix }}
-          DEPLOY_PAT: ${{ secrets.CHRONO_DEPLOY_PAT }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          git config --global user.name "ChronoTracer CI"
+          git config --global user.name "ChronoTracer Deploy Bot"
           git config --global user.email "ci@chronotracer.com"
 
           COUNT=$(echo "$MATRIX" | jq length)
@@ -106,7 +115,7 @@ jobs:
             echo "[$REPO] Cloning and tagging $TAG"
             echo "----------------------------------------"
 
-            git clone "https://x-access-token:${DEPLOY_PAT}@github.com/Quoyi-ChronoTracer/${REPO}.git" "$REPO"
+            git clone "https://x-access-token:${GH_TOKEN}@github.com/Quoyi-ChronoTracer/${REPO}.git" "$REPO"
             cd "$REPO"
 
             git tag -a "$TAG" -m "Release $TAG — promoted from staging"
