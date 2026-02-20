@@ -4,8 +4,9 @@
 #
 # PURPOSE:
 #   Handles all mechanics for deploying components via semver tags.
-#   Two paths: staging (push RC tags directly) or production (trigger
-#   GitHub Actions approval workflow).
+#   Both paths trigger GitHub Actions workflows — staging (no approval gate)
+#   and production (requires reviewer approval). All tag pushes go through
+#   the Deploy Bot GitHub App, enforced by tag protection rulesets.
 #
 #   The /deploy skill handles the "intelligence" half:
 #     - Querying existing tags per repo
@@ -83,67 +84,60 @@ declare -a TAGGED=()       # "repo-name|tag" entries
 declare -a FAILED=()       # repo names that failed
 
 # ---------------------------------------------------------------------------
-# Staging path: push RC tags directly to each component repo
+# Staging path: trigger GitHub Actions staging workflow
+# Tag rulesets restrict all v* tags to the Deploy Bot, so staging also
+# goes through GHA (no approval gate, just the bot pushing RC tags).
 # ---------------------------------------------------------------------------
 
 if [ "$ENVIRONMENT" = "staging" ]; then
+  step "Triggering staging promotion workflow"
+
+  # Build the repo_tags string: comma-separated name:tag pairs
+  REPO_TAGS=""
   for i in $(seq 0 $(( REPO_COUNT - 1 ))); do
     REPO_NAME=$(jq -r ".repos[$i].name" "$PLAN_FILE")
     TAG=$(jq -r ".repos[$i].tag" "$PLAN_FILE")
-    REPO_PATH="$MONO_ROOT/$REPO_NAME"
-
-    step "$REPO_NAME → $TAG"
-
-    if [ ! -d "$REPO_PATH" ]; then
-      info "Directory not found at $REPO_PATH — skipping"
-      FAILED+=("$REPO_NAME")
-      continue
+    if [ -n "$REPO_TAGS" ]; then
+      REPO_TAGS+=","
     fi
-
-    cd "$REPO_PATH"
-
-    # Fetch latest tags from remote
-    git fetch --tags
-    ok "Fetched tags"
-
-    # Check if tag already exists
-    if git rev-parse "$TAG" &>/dev/null; then
-      info "Tag $TAG already exists in $REPO_NAME — skipping"
-      FAILED+=("$REPO_NAME")
-      continue
-    fi
-
-    # Create annotated tag
-    git tag -a "$TAG" -m "Release $TAG"
-    ok "Created tag: $TAG"
-
-    # Push tag to origin
-    if ! git push origin "$TAG" 2>&1; then
-      info "Failed to push $TAG to $REPO_NAME"
-      git tag -d "$TAG" 2>/dev/null || true
-      FAILED+=("$REPO_NAME")
-      continue
-    fi
-    ok "Pushed tag to origin"
-
-    TAGGED+=("$REPO_NAME|$TAG")
+    REPO_TAGS+="$REPO_NAME:$TAG"
   done
 
-  # ---------------------------------------------------------------------------
-  # Summary — staging
-  # ---------------------------------------------------------------------------
+  info "repo_tags: $REPO_TAGS"
+
+  # Trigger the staging promote workflow via GitHub CLI
+  gh workflow run promote-staging.yml \
+    --repo Quoyi-ChronoTracer/chrono \
+    --field repo_tags="$REPO_TAGS"
+  ok "Workflow triggered"
+
+  # Brief pause to let GitHub register the run
+  sleep 3
+
+  # Get the URL of the most recent run
+  RUN_URL=$(gh run list \
+    --repo Quoyi-ChronoTracer/chrono \
+    --workflow=promote-staging.yml \
+    --limit=1 \
+    --json url \
+    --jq '.[0].url' 2>/dev/null || echo "(could not retrieve run URL)")
 
   echo ""
   echo "════════════════════════════════════════"
-  echo " Deploy complete — staging"
+  echo " Staging deploy triggered"
   echo "════════════════════════════════════════"
   echo ""
-  printf "  %-24s %s\n" "Repo" "Tag"
-  printf "  %-24s %s\n" "────────────────────────" "──────────────────────────────────────"
-  for entry in "${TAGGED[@]+"${TAGGED[@]}"}"; do
-    RNAME="${entry%%|*}"
-    RTAG="${entry#*|}"
-    printf "  %-24s %s\n" "$RNAME" "$RTAG"
+  echo "  RC tags will be pushed by the Deploy Bot."
+  echo "  CircleCI pipelines will fire automatically."
+  echo "  Monitor the workflow run:"
+  echo ""
+  echo "  $RUN_URL"
+  echo ""
+  echo "  Repos included:"
+  for i in $(seq 0 $(( REPO_COUNT - 1 ))); do
+    REPO_NAME=$(jq -r ".repos[$i].name" "$PLAN_FILE")
+    TAG=$(jq -r ".repos[$i].tag" "$PLAN_FILE")
+    echo "    - $REPO_NAME @ $TAG"
   done
 fi
 
