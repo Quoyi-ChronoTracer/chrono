@@ -76,8 +76,16 @@ jobs:
           echo "Parsed matrix: $JSON"
           echo "matrix=$JSON" >> "$GITHUB_OUTPUT"
 
-  push-tags:
+  approve:
     needs: validate
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Confirm approval
+        run: echo "Staging deployment approved"
+
+  push-tags:
+    needs: [validate, approve]
     runs-on: ubuntu-latest
     steps:
       - name: Generate GitHub App token
