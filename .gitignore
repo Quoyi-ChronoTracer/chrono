@@ -12,3 +12,6 @@ chrono-pipeline/
 
 # Temporary files written by Claude skills (e.g. ship-plan.json)
 .claude/tmp/
+
+# Workspace worktrees (parallel working copies)
+.claude/worktrees/
