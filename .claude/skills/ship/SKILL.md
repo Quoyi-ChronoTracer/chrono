@@ -22,22 +22,30 @@ Run `git status --short` in the parent, then `git -C <path> status --short` for 
 submodule. Identify repos with **tracked-file changes** — ignore `.DS_Store`-only diffs
 and repos with only untracked files.
 
-### 2. Clean up scratch files
+### 2. Confirm which repos to ship
+If **more than one** repo has tracked-file changes, present the list and ask the user
+which ones to include in this ship. Do NOT assume all dirty repos should ship together —
+unrelated in-progress work in other submodules should not be swept into the same branch.
+
+If only **one** repo is dirty (or the user's request clearly names a single component),
+skip the prompt and proceed with that repo.
+
+### 3. Clean up scratch files
 Before staging anything, delete any temp files, one-off scripts, or artifacts you created
 during the session that are not part of the feature.
 
-### 3. Analyse each dirty repo
-Run `git diff` in each dirty repo to understand what changed.
+### 4. Analyse each selected repo
+Run `git diff` in each repo the user confirmed for this ship to understand what changed.
 
-### 4. Write a commit message per repo
+### 5. Write a commit message per repo
 - **Single line only**
 - **Present third-person tense** — e.g. "Adds OCR extraction step", "Fixes date parsing in event deduplicator"
 - Summarise the *what*, not the *why*
 - Include ticket number if present in the branch name: `APP-297: Adds OCR extraction step`
 - **No co-author trailers** — do not append `Co-Authored-By` or any attribution lines
 
-### 5. Write the plan file
-Create `.claude/tmp/ship-plan.json` with the branch and one message per dirty repo:
+### 6. Write the plan file
+Create `.claude/tmp/ship-plan.json` with the branch and one message per confirmed repo:
 
 ```json
 {
@@ -53,9 +61,10 @@ Create `.claude/tmp/ship-plan.json` with the branch and one message per dirty re
 - `repos`: only include repos that actually have tracked-file changes. Can be empty `[]` when changes are mono root only.
 - `monoMessage`: include when repos is empty or when the auto-generated message ("Updates submodule refs…") wouldn't describe the change accurately.
 
-### 6. Run the script
+### 7. Run the script
 ```bash
 bash .claude/scripts/ship.sh
 ```
 
-The pre-ship hook fires automatically before this runs — tests pass or the ship is blocked.
+The pre-ship hook fires automatically before this runs — it reads `ship-plan.json` and
+only runs tests for repos listed in the plan. Unrelated dirty repos are not tested.
