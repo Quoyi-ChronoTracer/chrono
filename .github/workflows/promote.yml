@@ -1,0 +1,129 @@
+name: Production Promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo_tags:
+        description: >-
+          Comma-separated repo:tag pairs, e.g.
+          chrono-devops:v1.3.0,chrono-api:v2.5.0,chrono-app:v3.1.0
+        required: true
+        type: string
+
+concurrency:
+  group: production-promote
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.parse.outputs.matrix }}
+    steps:
+      - name: Parse and validate repo_tags
+        id: parse
+        run: |
+          ALLOWED_REPOS="chrono-devops chrono-api chrono-pipeline-v2 chrono-app chrono-filter-ai-api"
+          SEMVER_REGEX="^v[0-9]+\.[0-9]+\.[0-9]+$"
+
+          IFS=',' read -ra PAIRS <<< "${{ inputs.repo_tags }}"
+
+          if [ ${#PAIRS[@]} -eq 0 ]; then
+            echo "::error::No repo:tag pairs provided"
+            exit 1
+          fi
+
+          JSON="["
+          FIRST=true
+
+          for pair in "${PAIRS[@]}"; do
+            pair="$(echo "$pair" | xargs)"  # trim whitespace
+
+            repo="${pair%%:*}"
+            tag="${pair#*:}"
+
+            if [ "$repo" = "$pair" ] || [ -z "$tag" ]; then
+              echo "::error::Invalid format '$pair' — expected repo:tag"
+              exit 1
+            fi
+
+            # Validate repo name
+            if ! echo "$ALLOWED_REPOS" | grep -qw "$repo"; then
+              echo "::error::Unknown repo '$repo'. Allowed: $ALLOWED_REPOS"
+              exit 1
+            fi
+
+            # Validate tag is stable semver (no pre-release suffix)
+            if ! [[ "$tag" =~ $SEMVER_REGEX ]]; then
+              echo "::error::Tag '$tag' for repo '$repo' is not stable semver (expected vX.Y.Z with no suffix)"
+              exit 1
+            fi
+
+            if [ "$FIRST" = true ]; then
+              FIRST=false
+            else
+              JSON+=","
+            fi
+            JSON+="{\"repo\":\"$repo\",\"tag\":\"$tag\"}"
+
+            echo "Validated: $repo @ $tag"
+          done
+
+          JSON+="]"
+
+          echo "Parsed matrix: $JSON"
+          echo "matrix=$JSON" >> "$GITHUB_OUTPUT"
+
+  approve:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Confirm approval
+        run: echo "Production deployment approved"
+
+  push-tags:
+    needs: approve
+    runs-on: ubuntu-latest
+    steps:
+      - name: Push tags to component repos
+        env:
+          MATRIX: ${{ needs.validate.outputs.matrix }}
+          DEPLOY_PAT: ${{ secrets.CHRONO_DEPLOY_PAT }}
+        run: |
+          git config --global user.name "ChronoTracer CI"
+          git config --global user.email "ci@chronotracer.com"
+
+          COUNT=$(echo "$MATRIX" | jq length)
+          echo "Pushing tags for $COUNT repo(s)..."
+          echo ""
+
+          for i in $(seq 0 $(( COUNT - 1 ))); do
+            REPO=$(echo "$MATRIX" | jq -r ".[$i].repo")
+            TAG=$(echo "$MATRIX" | jq -r ".[$i].tag")
+
+            echo "----------------------------------------"
+            echo "[$REPO] Cloning and tagging $TAG"
+            echo "----------------------------------------"
+
+            git clone "https://x-access-token:${DEPLOY_PAT}@github.com/Quoyi-ChronoTracer/${REPO}.git" "$REPO"
+            cd "$REPO"
+
+            git tag -a "$TAG" -m "Release $TAG — promoted from staging"
+            git push origin "$TAG"
+
+            echo "[$REPO] Successfully pushed tag $TAG"
+            echo ""
+
+            cd ..
+          done
+
+          echo "========================================"
+          echo "Production promotion complete."
+          echo "Tagged repos:"
+          for i in $(seq 0 $(( COUNT - 1 ))); do
+            REPO=$(echo "$MATRIX" | jq -r ".[$i].repo")
+            TAG=$(echo "$MATRIX" | jq -r ".[$i].tag")
+            echo "  - $REPO @ $TAG"
+          done
+          echo "========================================"

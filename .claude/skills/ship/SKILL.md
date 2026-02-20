@@ -30,21 +30,43 @@ unrelated in-progress work in other submodules should not be swept into the same
 If only **one** repo is dirty (or the user's request clearly names a single component),
 skip the prompt and proceed with that repo.
 
-### 3. Clean up scratch files
+### 3. Rebase onto latest base branch
+Before branching, ensure each confirmed repo is based on the latest upstream. This
+prevents shipping stale code and avoids merge conflicts in PRs.
+
+For each confirmed **submodule repo**:
+```bash
+git -C <repo> fetch origin
+git -C <repo> stash        # stash dirty changes
+git -C <repo> checkout develop && git -C <repo> pull --ff-only origin develop
+git -C <repo> stash pop    # restore changes on top of latest develop
+```
+
+For the **mono repo parent** (if it has changes):
+```bash
+git fetch origin
+git stash
+git checkout main && git pull --ff-only origin main
+git stash pop
+```
+
+If `stash pop` produces conflicts, stop and inform the user before proceeding.
+
+### 4. Clean up scratch files
 Before staging anything, delete any temp files, one-off scripts, or artifacts you created
 during the session that are not part of the feature.
 
-### 4. Analyse each selected repo
+### 5. Analyse each selected repo
 Run `git diff` in each repo the user confirmed for this ship to understand what changed.
 
-### 5. Write a commit message per repo
+### 6. Write a commit message per repo
 - **Single line only**
 - **Present third-person tense** — e.g. "Adds OCR extraction step", "Fixes date parsing in event deduplicator"
 - Summarise the *what*, not the *why*
 - Include ticket number if present in the branch name: `APP-297: Adds OCR extraction step`
 - **No co-author trailers** — do not append `Co-Authored-By` or any attribution lines
 
-### 6. Write the plan file
+### 7. Write the plan file
 Create `.claude/tmp/ship-plan.json` with the branch and one message per confirmed repo:
 
 ```json
@@ -61,7 +83,7 @@ Create `.claude/tmp/ship-plan.json` with the branch and one message per confirme
 - `repos`: only include repos that actually have tracked-file changes. Can be empty `[]` when changes are mono root only.
 - `monoMessage`: include when repos is empty or when the auto-generated message ("Updates submodule refs…") wouldn't describe the change accurately.
 
-### 7. Run the script
+### 8. Run the script
 ```bash
 bash .claude/scripts/ship.sh
 ```
