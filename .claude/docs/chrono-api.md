@@ -1,6 +1,11 @@
 # chrono-api
 Swift AWS Lambda REST API backend. Layered architecture over PostgreSQL.
 
+## Tenant Isolation
+- Each customer deployment is a **separate AWS account** with its own RDS, S3, and Lambda stack. There is no database-level multi-tenancy — RLS and `matter_id` were removed in Oct 2024.
+- Auth is permission-based (`read`/`edit`/`admin`) via Auth0 JWTs → `Models/AuthorizedUser.swift`
+- Within a deployment, all authenticated users with `read` see all data.
+
 ## Key Patterns
 - **DatabaseQueryable protocol**: All models implement this — follow the existing pattern when adding new models.
 - **Handler pattern**: Complex operations have dedicated handlers in `Services/Handlers/`. Read existing ones before implementing anything new.

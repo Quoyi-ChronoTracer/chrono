@@ -18,6 +18,14 @@ presents an AI-powered timeline UI for analyzing evidence.
 
 ---
 
+## Session Workflow
+
+**Always work in a worktree.** At the start of every session that will produce code changes,
+create a worktree before making any edits. This keeps the main working tree clean and
+isolates in-progress work.
+
+---
+
 ## Engineering Principles
 
 1. **Plan first.** For non-trivial tasks: read relevant files, write a plan to `tasks/todo.md` in the affected component, check in before coding.
@@ -102,3 +110,10 @@ Before working in a component, read its doc for commands, architecture, and gotc
 - **chrono-pipeline-v2** → `.claude/docs/chrono-pipeline-v2.md`
 - **chrono-filter-ai-api** → `.claude/docs/chrono-filter-ai-api.md`
 - **chrono-devops** → `.claude/docs/chrono-devops.md`
+
+## Cross-Cutting Docs
+
+- **SOC 2 Compliance** → `.claude/docs/compliance.md`
+  _Load when reviewing PRs, adding API endpoints, modifying auth/access, or handling evidence data._
+- **Deployment Architecture** → `.claude/docs/deployment.md`
+  _Load when working on infrastructure, auth, database, CI/CD, or cross-component integration._

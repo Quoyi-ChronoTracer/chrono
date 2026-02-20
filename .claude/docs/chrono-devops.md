@@ -1,6 +1,11 @@
 # chrono-devops
 Terraform, Docker, CircleCI — infrastructure, DNS proxy, and environment configs for dev / staging / prod.
 
+## Tenant Isolation
+- **One AWS account per customer.** Each account gets its own VPC, RDS Aurora cluster, S3 buckets, Lambda/ECS stack, and Auth0 tenant.
+- Customer accounts are declared in `environments/*.yaml`. Terraform output per account lives in `output/<env>/<account-name>/`.
+- There is no database-level multi-tenancy. Each customer's RDS has a single `chrono` database and `chrono_api` user.
+
 ## Key Notes
 - Infrastructure is Terraform — run `terraform plan` before `apply`, always review the diff.
 - CI/CD is CircleCI — pipeline definitions drive all deployments.

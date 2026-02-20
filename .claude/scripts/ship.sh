@@ -181,6 +181,13 @@ EOF
     }
 
   ok "PR: $PR_URL"
+
+  # Post a review request comment for Claude on GitHub
+  if [[ "$PR_URL" == http* ]]; then
+    gh pr comment "$PR_URL" --body "@claude review this PR" 2>/dev/null || true
+    ok "Requested @claude review"
+  fi
+
   PR_URLS+=("$REPO_NAME|$PR_URL")
   SHIPPED_NAMES+=("$REPO_NAME")
 done
@@ -265,6 +272,13 @@ EOF
     }
 
   ok "PR: $MONO_PR_URL"
+
+  # Post a review request comment for Claude on GitHub
+  if [[ "$MONO_PR_URL" == http* ]]; then
+    gh pr comment "$MONO_PR_URL" --body "@claude review this PR" 2>/dev/null || true
+    ok "Requested @claude review"
+  fi
+
   PR_URLS+=("chrono (mono)|$MONO_PR_URL")
 else
   info "No root-level changes — skipping mono repo PR"
