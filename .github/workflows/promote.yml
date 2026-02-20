@@ -87,6 +87,7 @@ jobs:
   push-tags:
     needs: [validate, approve]
     runs-on: ubuntu-latest
+    environment: deploy-bot
     steps:
       - name: Generate GitHub App token
         id: app-token
