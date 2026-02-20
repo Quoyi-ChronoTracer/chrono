@@ -12,6 +12,7 @@
 #   bash .claude/scripts/workspace.sh create <name>
 #   bash .claude/scripts/workspace.sh remove <name>
 #   bash .claude/scripts/workspace.sh list
+#   bash .claude/scripts/workspace.sh gc
 
 set -euo pipefail
 
@@ -199,6 +200,61 @@ cmd_list() {
 }
 
 # ---------------------------------------------------------------------------
+# gc — remove workspaces older than 7 days
+# ---------------------------------------------------------------------------
+
+cmd_gc() {
+  if [ ! -d "$WORKTREE_BASE" ]; then
+    echo "No workspaces found."
+    return 0
+  fi
+
+  local stale=()
+  local max_age_days=7
+  local now
+  now=$(date +%s)
+
+  for ws_dir in "$WORKTREE_BASE"/*/; do
+    [ -d "$ws_dir" ] || continue
+
+    local ws_name
+    ws_name="$(basename "$ws_dir")"
+
+    # Get modification time (macOS stat syntax)
+    local mtime
+    if stat -f %m "$ws_dir" &>/dev/null; then
+      mtime=$(stat -f %m "$ws_dir")
+    else
+      # Linux fallback
+      mtime=$(stat -c %Y "$ws_dir")
+    fi
+
+    local age_days=$(( (now - mtime) / 86400 ))
+
+    if [ "$age_days" -ge "$max_age_days" ]; then
+      stale+=("$ws_name")
+    fi
+  done
+
+  if [ ${#stale[@]} -eq 0 ]; then
+    echo "No stale workspaces found (all are less than $max_age_days days old)."
+    return 0
+  fi
+
+  step "Removing ${#stale[@]} stale workspace(s)"
+
+  for ws_name in "${stale[@]}"; do
+    echo ""
+    echo "  Removing '$ws_name' …"
+    cmd_remove "$ws_name"
+  done
+
+  echo ""
+  echo "✓  Garbage collection complete — removed ${#stale[@]} workspace(s)."
+  echo ""
+}
+
+# ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
 
@@ -209,5 +265,6 @@ case "$COMMAND" in
   create) cmd_create "$@" ;;
   remove) cmd_remove "$@" ;;
   list)   cmd_list        ;;
-  *)      fail "Usage: workspace.sh {create|remove|list} [name]" ;;
+  gc)     cmd_gc          ;;
+  *)      fail "Usage: workspace.sh {create|remove|list|gc} [name]" ;;
 esac
