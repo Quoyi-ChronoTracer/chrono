@@ -1,14 +1,24 @@
 # chrono-filter-ai-api
 FastAPI + AWS Bedrock (Claude). Converts natural language queries into structured event filters via MCP tools.
 
+## Setup
+```bash
+# Automated (from mono root)
+bash .claude/scripts/bootstrap.sh chrono-filter-ai-api
+
+# Manual
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+```
+Always use `.venv/bin/python` — `test.sh` expects `.venv/bin/python` to exist.
+
 ## Commands
 ```bash
-pip install -r requirements.txt -r requirements-dev.txt
-python local.py                                         # dev server at :8000
+.venv/bin/python local.py                                         # dev server at :8000
 
-pytest chrono_query/tests/ -v
-SKIP_MIGRATIONS=true pytest chrono_query/tests/ -v     # no local test DB
-createdb chrono_test                                    # one-time test DB setup
+.venv/bin/python -m pytest chrono_query/tests/ -v
+SKIP_MIGRATIONS=true .venv/bin/python -m pytest chrono_query/tests/ -v  # no local test DB
+createdb chrono_test                                               # one-time test DB setup
 ```
 Deploy: `git push origin <branch>` — CircleCI auto-deploys (`master`→prod, `develop`→develop, `staging`→staging).
 
