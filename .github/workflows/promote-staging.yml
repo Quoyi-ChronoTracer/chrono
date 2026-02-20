@@ -126,6 +126,8 @@ jobs:
             git clone "https://github.com/Quoyi-ChronoTracer/${REPO}.git" "$REPO"
             cd "$REPO"
 
+            # Tag the tip of develop, which is the branch staging deploys from
+            git checkout develop
             git tag -a "$TAG" -m "Release $TAG"
 
             if ! git push origin "$TAG" 2>&1; then
