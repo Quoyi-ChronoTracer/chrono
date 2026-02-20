@@ -1,7 +1,7 @@
 ---
 name: workspace
-description: User-invoked. Use /workspace <name> to create a full parallel worktree (parent + all submodules) for independent work. Use /workspace remove <name> to tear it down, or /workspace list to see existing workspaces.
-argument-hint: <name> | remove <name> | list
+description: User-invoked. Use /workspace <name> to create a full parallel worktree (parent + all submodules) for independent work. Use /workspace remove <name> to tear it down, /workspace list to see existing workspaces, or /workspace gc to remove stale workspaces older than 7 days.
+argument-hint: <name> | remove <name> | list | gc
 ---
 
 Route based on `$ARGUMENTS`:
@@ -14,6 +14,11 @@ Route based on `$ARGUMENTS`:
 - If `$ARGUMENTS` is `list`: run:
   ```bash
   bash .claude/scripts/workspace.sh list
+  ```
+
+- If `$ARGUMENTS` is `gc`: run:
+  ```bash
+  bash .claude/scripts/workspace.sh gc
   ```
 
 - Otherwise treat `$ARGUMENTS` as the workspace name and run:

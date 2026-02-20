@@ -24,6 +24,18 @@ presents an AI-powered timeline UI for analyzing evidence.
 create a worktree before making any edits. This keeps the main working tree clean and
 isolates in-progress work.
 
+A `SessionStart` hook automatically injects repo state at the beginning of every session.
+Use the table below to decide what action to take based on the signals:
+
+| Signal | Action |
+|---|---|
+| **Not in worktree** | Run `/workspace <name>` before making any code changes. Edit/Write calls to code files will be blocked until you do. |
+| **Branch mismatch** | A submodule is on a different branch than the parent. Run `/checkout <branch>` to realign. |
+| **Ref drift** | A submodule HEAD doesn't match the parent's recorded ref. Run `/pull` to sync. |
+| **Dirty submodule** | Uncommitted changes exist. Decide whether to commit (`/ship`) or stash before switching context. |
+| **3+ active workspaces** | Suggest `/workspace gc` or `/workspace remove <name>` to clean up stale ones. |
+| **All clean** | Proceed normally. |
+
 ---
 
 ## Engineering Principles

@@ -122,6 +122,30 @@ bootstrap_repo() {
 }
 
 # ---------------------------------------------------------------------------
+# Git config — make raw git submodule-safe
+# ---------------------------------------------------------------------------
+
+echo "▶  Git config"
+
+git -C "$MONO_ROOT" config submodule.recurse true
+git -C "$MONO_ROOT" config fetch.recurseSubmodules on-demand
+git -C "$MONO_ROOT" config push.recurseSubmodules check
+
+echo "   submodule.recurse = true"
+echo "   fetch.recurseSubmodules = on-demand"
+echo "   push.recurseSubmodules = check"
+echo "✓  Git config"
+echo ""
+
+# ---------------------------------------------------------------------------
+# Install git hooks
+# ---------------------------------------------------------------------------
+
+echo "▶  Git hooks"
+bash "$SCRIPT_DIR/install-hooks.sh"
+echo ""
+
+# ---------------------------------------------------------------------------
 # Determine which repos to bootstrap
 # ---------------------------------------------------------------------------
 
@@ -150,3 +174,16 @@ if [ ${#FAILED[@]} -gt 0 ]; then
 fi
 
 echo "✓  All repos bootstrapped."
+echo ""
+echo "════════════════════════════════════════"
+echo " Quick Start"
+echo "════════════════════════════════════════"
+echo ""
+echo "  Pull latest:           bash .claude/scripts/pull.sh"
+echo "  Create workspace:      bash .claude/scripts/workspace.sh create <name>"
+echo "  Create branch:         bash .claude/scripts/branch.sh <name>"
+echo "  Switch branch:         bash .claude/scripts/checkout.sh <name>"
+echo "  Ship changes:          bash .claude/scripts/ship.sh"
+echo ""
+echo "  With Claude Code:      /pull, /workspace, /branch, /checkout, /ship"
+echo ""
