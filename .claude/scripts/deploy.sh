@@ -118,7 +118,12 @@ if [ "$ENVIRONMENT" = "staging" ]; then
     ok "Created tag: $TAG"
 
     # Push tag to origin
-    git push origin "$TAG"
+    if ! git push origin "$TAG" 2>&1; then
+      info "Failed to push $TAG to $REPO_NAME"
+      git tag -d "$TAG" 2>/dev/null || true
+      FAILED+=("$REPO_NAME")
+      continue
+    fi
     ok "Pushed tag to origin"
 
     TAGGED+=("$REPO_NAME|$TAG")
