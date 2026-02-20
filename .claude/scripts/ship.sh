@@ -239,7 +239,7 @@ if [ -n "$PARENT_CHANGES" ]; then
 
   # Build PR body with links to all component PRs
   COMPONENT_PR_LIST=""
-  for entry in "${PR_URLS[@]}"; do
+  for entry in "${PR_URLS[@]+"${PR_URLS[@]}"}"; do
     RNAME="${entry%%|*}"
     RURL="${entry#*|}"
     COMPONENT_PR_LIST+="- **$RNAME**: $RURL"$'\n'
