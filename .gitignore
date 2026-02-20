@@ -9,3 +9,6 @@ chrono-pipeline/
 
 # Cursor IDE
 .cursor/
+
+# Temporary files written by Claude skills (e.g. ship-plan.json)
+.claude/tmp/
