@@ -75,7 +75,7 @@ test_repo() {
     chrono-app)           run_if_dirty "$name" "$MONO_ROOT/$name" "yarn test --run && yarn lint" ;;
     chrono-api)           run_if_dirty "$name" "$MONO_ROOT/$name" "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test" ;;
     chrono-pipeline-v2)   run_if_dirty "$name" "$MONO_ROOT/$name" ".venv/bin/python -m pytest tests/unit/ -x -v" ;;
-    chrono-filter-ai-api) run_if_dirty "$name" "$MONO_ROOT/$name" "pytest chrono_query/tests/ -v" ;;
+    chrono-filter-ai-api) run_if_dirty "$name" "$MONO_ROOT/$name" ".venv/bin/python -m pytest chrono_query/tests/ -v" ;;
     chrono-devops)        echo "✓  chrono-devops — no test suite" ;;
     *)                    echo "⚠  Unknown repo '$name' — skipping tests" ;;
   esac
