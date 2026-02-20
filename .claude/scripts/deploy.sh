@@ -4,9 +4,9 @@
 #
 # PURPOSE:
 #   Handles all mechanics for deploying components via semver tags.
-#   Both paths trigger GitHub Actions workflows — staging (no approval gate)
-#   and production (requires reviewer approval). All tag pushes go through
-#   the Deploy Bot GitHub App, enforced by tag protection rulesets.
+#   Both paths trigger GitHub Actions workflows with reviewer approval
+#   gates. All tag pushes go through the Deploy Bot GitHub App,
+#   enforced by tag protection rulesets.
 #
 #   The /deploy skill handles the "intelligence" half:
 #     - Querying existing tags per repo
@@ -85,8 +85,8 @@ declare -a FAILED=()       # repo names that failed
 
 # ---------------------------------------------------------------------------
 # Staging path: trigger GitHub Actions staging workflow
-# Tag rulesets restrict all v* tags to the Deploy Bot, so staging also
-# goes through GHA (no approval gate, just the bot pushing RC tags).
+# Tag rulesets restrict all v* tags to the Deploy Bot. Staging goes
+# through GHA with a reviewer approval gate, same as production.
 # ---------------------------------------------------------------------------
 
 if [ "$ENVIRONMENT" = "staging" ]; then

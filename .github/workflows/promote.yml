@@ -87,6 +87,7 @@ jobs:
   push-tags:
     needs: [validate, approve]
     runs-on: ubuntu-latest
+    environment: deploy-bot
     steps:
       - name: Generate GitHub App token
         id: app-token
@@ -126,8 +127,8 @@ jobs:
             git clone "https://github.com/Quoyi-ChronoTracer/${REPO}.git" "$REPO"
             cd "$REPO"
 
-            # Verify an RC tag exists for this version
-            RC_EXISTS=$(git tag -l "${TAG}-rc.*" | head -1)
+            # Verify an RC tag exists for this version and resolve its commit
+            RC_EXISTS=$(git tag -l "${TAG}-rc.*" | sort -V | tail -1)
             if [ -z "$RC_EXISTS" ]; then
               echo "::error::No RC tag found for ${TAG} in ${REPO}. Cannot promote without staging first."
               FAILED+=("$REPO")
@@ -135,7 +136,10 @@ jobs:
               continue
             fi
 
-            git tag -a "$TAG" -m "Release $TAG — promoted from staging"
+            RC_COMMIT=$(git rev-list -n 1 "$RC_EXISTS")
+            echo "[$REPO] Promoting commit $RC_COMMIT from $RC_EXISTS"
+
+            git tag -a "$TAG" "$RC_COMMIT" -m "Release $TAG — promoted from $RC_EXISTS"
 
             if ! git push origin "$TAG" 2>&1; then
               echo "::error::Failed to push $TAG to $REPO"
