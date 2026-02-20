@@ -54,7 +54,7 @@ MONO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PLAN_FILE="$SCRIPT_DIR/../tmp/ship-plan.json"
 
 # Default reviewers added to every PR
-REVIEWERS="ata-peppered,DexterW,jessicaribeiroalves,copilot"
+REVIEWERS="ata-peppered,DexterW,jessicaribeiroalves"
 
 # ---------------------------------------------------------------------------
 # Helpers

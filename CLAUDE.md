@@ -49,17 +49,19 @@ PRs always target `develop` in each component repo.
 
 ## Submodule Workflow
 
+Treat this as a single repo. Use the skills and scripts below — they propagate every operation across all submodules automatically.
+
 ```bash
 # First-time clone
 git clone --recurse-submodules https://github.com/Quoyi-ChronoTracer/chrono.git
-
-# Pull latest across everything
-git submodule update --remote --merge
-
-# After a component PR merges into develop, bump the parent reference
-git add <submodule-dir>
-git commit -m "chore: bumps chrono-app to latest develop"
 ```
+
+| Operation | Skill | Script |
+|---|---|---|
+| Pull latest | `/pull` | `bash .claude/scripts/pull.sh` |
+| Create branch | `/branch <name>` | `bash .claude/scripts/branch.sh <name>` |
+| Switch branch | `/checkout <name>` | `bash .claude/scripts/checkout.sh <name>` |
+| Commit + push + PR | `/ship <name>` | `bash .claude/scripts/ship.sh` |
 
 ---
 
@@ -72,7 +74,10 @@ All Claude Code config lives in `.claude/` in this repo and is shared across the
 ├── settings.json              # Shared permissions baseline (committed)
 ├── settings.local.json        # Per-engineer overrides (gitignored)
 ├── skills/
-│   ├── ship/SKILL.md          # /ship — user-triggered multi-repo branch/commit/push/PR
+│   ├── ship/SKILL.md          # /ship — commit, push, and open PRs across dirty repos
+│   ├── branch/SKILL.md        # /branch — create branch across all repos
+│   ├── checkout/SKILL.md      # /checkout — switch branch across all repos
+│   ├── pull/SKILL.md          # /pull — pull latest across all repos
 │   └── lean-docs/SKILL.md     # auto-invoked when editing any context doc
 ├── agents/
 │   └── code-reviewer.md       # Cross-stack code review agent
@@ -82,10 +87,8 @@ All Claude Code config lives in `.claude/` in this repo and is shared across the
 
 ### `/ship <branch-name>`
 
-From the mono repo root: detects all dirty submodules, creates matching branches, commits,
-pushes, and opens individual PRs in each component repo, then updates the parent's submodule
-refs and opens a PR there too.
-
+Detects all dirty submodules, commits, pushes, and opens individual PRs in each component
+repo, then updates the parent's submodule refs and opens a PR there too.
 From inside a single component directory: behaves as a single-repo ship.
 
 ---
