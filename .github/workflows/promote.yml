@@ -22,11 +22,13 @@ jobs:
     steps:
       - name: Parse and validate repo_tags
         id: parse
+        env:
+          REPO_TAGS_INPUT: ${{ inputs.repo_tags }}
         run: |
           ALLOWED_REPOS="chrono-devops chrono-api chrono-pipeline-v2 chrono-app chrono-filter-ai-api"
           SEMVER_REGEX="^v[0-9]+\.[0-9]+\.[0-9]+$"
 
-          IFS=',' read -ra PAIRS <<< "${{ inputs.repo_tags }}"
+          IFS=',' read -ra PAIRS <<< "$REPO_TAGS_INPUT"
 
           if [ ${#PAIRS[@]} -eq 0 ]; then
             echo "::error::No repo:tag pairs provided"
@@ -83,17 +85,20 @@ jobs:
         run: echo "Production deployment approved"
 
   push-tags:
-    needs: approve
+    needs: [validate, approve]
     runs-on: ubuntu-latest
     steps:
       - name: Generate GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547  # v1.12.0
         with:
           app-id: ${{ secrets.DEPLOY_APP_ID }}
           private-key: ${{ secrets.DEPLOY_APP_PRIVATE_KEY }}
           owner: Quoyi-ChronoTracer
           repositories: chrono-devops,chrono-api,chrono-pipeline-v2,chrono-app,chrono-filter-ai-api
+
+      - name: Mask token
+        run: echo "::add-mask::${{ steps.app-token.outputs.token }}"
 
       - name: Push tags to component repos
         env:
@@ -102,10 +107,13 @@ jobs:
         run: |
           git config --global user.name "ChronoTracer Deploy Bot"
           git config --global user.email "ci@chronotracer.com"
+          git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
 
           COUNT=$(echo "$MATRIX" | jq length)
           echo "Pushing tags for $COUNT repo(s)..."
           echo ""
+
+          FAILED=()
 
           for i in $(seq 0 $(( COUNT - 1 ))); do
             REPO=$(echo "$MATRIX" | jq -r ".[$i].repo")
@@ -115,11 +123,26 @@ jobs:
             echo "[$REPO] Cloning and tagging $TAG"
             echo "----------------------------------------"
 
-            git clone "https://x-access-token:${GH_TOKEN}@github.com/Quoyi-ChronoTracer/${REPO}.git" "$REPO"
+            git clone "https://github.com/Quoyi-ChronoTracer/${REPO}.git" "$REPO"
             cd "$REPO"
 
+            # Verify an RC tag exists for this version
+            RC_EXISTS=$(git tag -l "${TAG}-rc.*" | head -1)
+            if [ -z "$RC_EXISTS" ]; then
+              echo "::error::No RC tag found for ${TAG} in ${REPO}. Cannot promote without staging first."
+              FAILED+=("$REPO")
+              cd ..
+              continue
+            fi
+
             git tag -a "$TAG" -m "Release $TAG — promoted from staging"
-            git push origin "$TAG"
+
+            if ! git push origin "$TAG" 2>&1; then
+              echo "::error::Failed to push $TAG to $REPO"
+              FAILED+=("$REPO")
+              cd ..
+              continue
+            fi
 
             echo "[$REPO] Successfully pushed tag $TAG"
             echo ""
@@ -136,3 +159,9 @@ jobs:
             echo "  - $REPO @ $TAG"
           done
           echo "========================================"
+
+          if [ ${#FAILED[@]} -gt 0 ]; then
+            echo ""
+            echo "::error::Failed repos: ${FAILED[*]}"
+            exit 1
+          fi
