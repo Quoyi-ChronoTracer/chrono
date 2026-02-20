@@ -286,17 +286,17 @@ echo "════════════════════════�
 echo ""
 printf "  %-24s %s\n" "Repo" "PR"
 printf "  %-24s %s\n" "────────────────────────" "──────────────────────────────────────"
-for entry in "${PR_URLS[@]}"; do
+for entry in "${PR_URLS[@]+"${PR_URLS[@]}"}"; do
   RNAME="${entry%%|*}"
   RURL="${entry#*|}"
   printf "  %-24s %s\n" "$RNAME" "$RURL"
 done
 
 # Report failures if any
-if [ ${#FAILED_NAMES[@]} -gt 0 ]; then
+if [ "${#FAILED_NAMES[@]}" -gt 0 ]; then
   echo ""
   echo "  ⚠  Failed repos (require manual attention):"
-  for name in "${FAILED_NAMES[@]}"; do
+  for name in "${FAILED_NAMES[@]+"${FAILED_NAMES[@]}"}"; do
     echo "     - $name"
   done
   exit 1
