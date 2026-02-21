@@ -29,12 +29,13 @@ Apply the dependency graph to expand the target set with downstream repos that m
 redeploy when an upstream changes infrastructure or APIs they depend on:
 
 ```
-chrono-devops -> [chrono-api, chrono-pipeline-v2, chrono-filter-ai-api]
-chrono-api    -> [chrono-app]
+chrono-devops -> [chrono-api]
+chrono-api    -> [chrono-app, chrono-pipeline-v2, chrono-filter-ai-api]
 ```
 
 Compute the **transitive closure** — e.g. `chrono-devops` selected pulls in all four
-downstream repos; `chrono-api` selected pulls in `chrono-app`.
+downstream repos; `chrono-api` selected pulls in app, pipeline, and filter-ai.
+Any tier-2 repo selected alone has no downstream dependencies.
 
 For each auto-included repo, look up its **latest existing tag** (no version bump):
 - **Staging**: latest `v*-rc.*` tag
