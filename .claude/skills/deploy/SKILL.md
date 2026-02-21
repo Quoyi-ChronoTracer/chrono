@@ -23,6 +23,28 @@ Parse from `$ARGUMENTS`:
 If the user supplied a comma-separated repo list, use only those repos. Otherwise default
 to all five component repos.
 
+### 1b. Auto-include downstream repos
+
+Apply the dependency graph to expand the target set with downstream repos that must
+redeploy when an upstream changes infrastructure or APIs they depend on:
+
+```
+chrono-devops -> [chrono-api]
+chrono-api    -> [chrono-app, chrono-pipeline-v2, chrono-filter-ai-api]
+```
+
+Compute the **transitive closure** — e.g. `chrono-devops` selected pulls in all four
+downstream repos; `chrono-api` selected pulls in app, pipeline, and filter-ai.
+Any tier-2 repo selected alone has no downstream dependencies.
+
+For each auto-included repo, look up its **latest existing tag** (no version bump):
+- **Staging**: latest `v*-rc.*` tag
+- **Production**: latest stable `v*` tag (no `-rc`)
+
+When presenting the table in step 3, annotate auto-included repos with `(auto-included)`.
+The user may remove auto-included repos during confirmation — only user-selected repos
+receive version bumps.
+
 ### 2. Query existing tags per repo
 For each target repo, fetch and list existing version tags:
 ```bash
@@ -37,13 +59,15 @@ Parse out two values per repo:
 Default to a **patch bump** from the latest stable tag per repo. Present a table to the
 user showing:
 
-| Repo | Latest Stable | Proposed Tag |
-|------|---------------|--------------|
-| chrono-devops | v1.2.3 | v1.2.4-rc.1 |
-| chrono-api | v2.4.9 | v2.4.10-rc.1 |
-| ... | ... | ... |
+| Repo | Latest Stable | Proposed Tag | Note |
+|------|---------------|--------------|------|
+| chrono-devops | v1.2.3 | v1.2.4-rc.1 | |
+| chrono-api | v2.4.9 | v2.4.10-rc.1 | |
+| chrono-app | v3.1.0 | v3.1.0-rc.2 | (auto-included) |
+| ... | ... | ... | |
 
-Ask the user to **confirm or override** — they may want minor or major bumps for some repos.
+Ask the user to **confirm or override** — they may want minor or major bumps for
+user-selected repos, and may remove auto-included repos if desired.
 
 ### 4. Determine tag format by environment
 
