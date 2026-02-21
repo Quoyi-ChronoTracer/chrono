@@ -169,3 +169,218 @@ jobs:
             echo "::error::Failed repos: ${FAILED[*]}"
             exit 1
           fi
+
+  trigger-circleci:
+    needs: [validate, push-tags]
+    runs-on: ubuntu-latest
+    environment: deploy-bot
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547  # v1.12.0
+        with:
+          app-id: ${{ secrets.DEPLOY_APP_ID }}
+          private-key: ${{ secrets.DEPLOY_APP_PRIVATE_KEY }}
+          owner: Quoyi-ChronoTracer
+          repositories: chrono-devops,chrono-api,chrono-pipeline-v2,chrono-app,chrono-filter-ai-api
+
+      - name: Mask token
+        run: echo "::add-mask::${{ steps.app-token.outputs.token }}"
+
+      - name: Trigger CircleCI and create GitHub Deployments
+        env:
+          MATRIX: ${{ needs.validate.outputs.matrix }}
+          CIRCLECI_TOKEN: ${{ secrets.CIRCLECI_API_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          REPOS_IN_PLAN=$(echo "$MATRIX" | jq -r '.[].repo')
+
+          has_repo() {
+            echo "$REPOS_IN_PLAN" | grep -qx "$1"
+          }
+
+          # Gated repos need a CircleCI API call with trigger_deploy: true.
+          # Ungated repos (chrono-devops, chrono-pipeline-v2) deploy via tag push alone.
+          GATED_REPOS=("chrono-api" "chrono-app" "chrono-filter-ai-api")
+
+          # Collect pipeline/deployment IDs for polling
+          declare -a POLL_REPOS=()
+          declare -a POLL_PIPELINE_IDS=()
+          declare -a POLL_DEPLOYMENT_IDS=()
+
+          for REPO in "${GATED_REPOS[@]}"; do
+            if ! has_repo "$REPO"; then
+              echo "[SKIP] $REPO — not in deploy plan"
+              continue
+            fi
+
+            TAG=$(echo "$MATRIX" | jq -r --arg r "$REPO" '.[] | select(.repo == $r) | .tag')
+            echo "[TRIGGER] $REPO @ $TAG"
+
+            # Trigger CircleCI pipeline
+            HTTP_CODE=$(curl -s -o /tmp/cci_${REPO}.json -w "%{http_code}" \
+              -X POST "https://circleci.com/api/v2/project/gh/Quoyi-ChronoTracer/${REPO}/pipeline" \
+              -H "Circle-Token: ${CIRCLECI_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{\"tag\": \"${TAG}\", \"parameters\": {\"trigger_deploy\": true}}")
+
+            if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+              echo "::error::Failed to trigger CircleCI for $REPO (HTTP $HTTP_CODE)"
+              cat /tmp/cci_${REPO}.json
+              exit 1
+            fi
+
+            PIPELINE_ID=$(jq -r '.id' /tmp/cci_${REPO}.json)
+            PIPELINE_NUM=$(jq -r '.number' /tmp/cci_${REPO}.json)
+            echo "[OK] $REPO — CircleCI pipeline $PIPELINE_ID triggered"
+
+            # Create GitHub Deployment
+            DEPLOY_RESPONSE=$(curl -s -X POST \
+              "https://api.github.com/repos/Quoyi-ChronoTracer/${REPO}/deployments" \
+              -H "Authorization: token ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -d "$(jq -n --arg ref "$TAG" --arg env "production" '{
+                ref: $ref,
+                environment: $env,
+                auto_merge: false,
+                required_contexts: [],
+                description: "Production deployment via promote workflow"
+              }')")
+
+            DEPLOYMENT_ID=$(echo "$DEPLOY_RESPONSE" | jq -r '.id')
+            echo "[DEPLOY] $REPO — GitHub deployment $DEPLOYMENT_ID created"
+
+            # Set initial status to in_progress
+            curl -s -X POST \
+              "https://api.github.com/repos/Quoyi-ChronoTracer/${REPO}/deployments/${DEPLOYMENT_ID}/statuses" \
+              -H "Authorization: token ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -d "$(jq -n --arg url "https://app.circleci.com/pipelines/github/Quoyi-ChronoTracer/${REPO}/${PIPELINE_NUM}" '{
+                state: "in_progress",
+                target_url: $url,
+                description: "CircleCI pipeline running"
+              }')" > /dev/null
+
+            POLL_REPOS+=("$REPO")
+            POLL_PIPELINE_IDS+=("$PIPELINE_ID")
+            POLL_DEPLOYMENT_IDS+=("$DEPLOYMENT_ID")
+          done
+
+          TRIGGERED=${#POLL_REPOS[@]}
+          if [ "$TRIGGERED" -eq 0 ]; then
+            echo ""
+            echo "No gated repos in deploy plan — ungated repos deploy via tag push."
+            exit 0
+          fi
+
+          echo ""
+          echo "Triggered $TRIGGERED gated repo(s). Polling for completion..."
+          echo ""
+
+          # Poll all pipelines in a unified loop (every 20s, up to 10 min)
+          MAX_ATTEMPTS=30
+          SLEEP_SECONDS=20
+          declare -A FINISHED=()
+
+          for attempt in $(seq 1 $MAX_ATTEMPTS); do
+            ALL_DONE=true
+
+            for i in "${!POLL_REPOS[@]}"; do
+              REPO="${POLL_REPOS[$i]}"
+
+              # Skip already-finished pipelines
+              if [ -n "${FINISHED[$REPO]:-}" ]; then
+                continue
+              fi
+
+              PID="${POLL_PIPELINE_IDS[$i]}"
+              DID="${POLL_DEPLOYMENT_IDS[$i]}"
+              PIPELINE_NUM=$(jq -r '.number' /tmp/cci_${REPO}.json)
+
+              WF_RESPONSE=$(curl -s \
+                "https://circleci.com/api/v2/pipeline/${PID}/workflow" \
+                -H "Circle-Token: ${CIRCLECI_TOKEN}")
+
+              STATUS=$(echo "$WF_RESPONSE" | jq -r '.items[0].status // "pending"')
+              TARGET_URL="https://app.circleci.com/pipelines/github/Quoyi-ChronoTracer/${REPO}/${PIPELINE_NUM}"
+
+              case "$STATUS" in
+                success)
+                  echo "[DONE] $REPO — success"
+                  curl -s -X POST \
+                    "https://api.github.com/repos/Quoyi-ChronoTracer/${REPO}/deployments/${DID}/statuses" \
+                    -H "Authorization: token ${GH_TOKEN}" \
+                    -H "Accept: application/vnd.github+json" \
+                    -d "$(jq -n --arg url "$TARGET_URL" '{
+                      state: "success",
+                      target_url: $url,
+                      description: "Deployment succeeded"
+                    }')" > /dev/null
+                  FINISHED[$REPO]="success"
+                  ;;
+                failed|error|canceled)
+                  echo "[FAIL] $REPO — $STATUS"
+                  curl -s -X POST \
+                    "https://api.github.com/repos/Quoyi-ChronoTracer/${REPO}/deployments/${DID}/statuses" \
+                    -H "Authorization: token ${GH_TOKEN}" \
+                    -H "Accept: application/vnd.github+json" \
+                    -d "$(jq -n --arg url "$TARGET_URL" --arg status "$STATUS" '{
+                      state: "failure",
+                      target_url: $url,
+                      description: ("Deployment " + $status)
+                    }')" > /dev/null
+                  FINISHED[$REPO]="$STATUS"
+                  ;;
+                *)
+                  ALL_DONE=false
+                  ;;
+              esac
+            done
+
+            if [ "$ALL_DONE" = true ]; then
+              break
+            fi
+
+            if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+              echo "[POLL $attempt/$MAX_ATTEMPTS] Waiting ${SLEEP_SECONDS}s..."
+              sleep $SLEEP_SECONDS
+            fi
+          done
+
+          # Handle timeouts
+          HAS_FAILURE=false
+          for i in "${!POLL_REPOS[@]}"; do
+            REPO="${POLL_REPOS[$i]}"
+            DID="${POLL_DEPLOYMENT_IDS[$i]}"
+            PIPELINE_NUM=$(jq -r '.number' /tmp/cci_${REPO}.json)
+
+            if [ -z "${FINISHED[$REPO]:-}" ]; then
+              echo "[TIMEOUT] $REPO — still running after $((MAX_ATTEMPTS * SLEEP_SECONDS))s"
+              curl -s -X POST \
+                "https://api.github.com/repos/Quoyi-ChronoTracer/${REPO}/deployments/${DID}/statuses" \
+                -H "Authorization: token ${GH_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                -d "$(jq -n --arg url "https://app.circleci.com/pipelines/github/Quoyi-ChronoTracer/${REPO}/${PIPELINE_NUM}" '{
+                  state: "in_progress",
+                  target_url: $url,
+                  description: "Polling timed out — check CircleCI for final status"
+                }')" > /dev/null
+            elif [ "${FINISHED[$REPO]}" != "success" ]; then
+              HAS_FAILURE=true
+            fi
+          done
+
+          echo ""
+          echo "========================================"
+          echo "Deployment status summary:"
+          for i in "${!POLL_REPOS[@]}"; do
+            REPO="${POLL_REPOS[$i]}"
+            STATUS="${FINISHED[$REPO]:-timeout}"
+            echo "  - $REPO: $STATUS"
+          done
+          echo "========================================"
+
+          if [ "$HAS_FAILURE" = true ]; then
+            echo "::error::One or more deployments failed"
+            exit 1
+          fi
