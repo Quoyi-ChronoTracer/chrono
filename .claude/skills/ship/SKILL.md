@@ -6,87 +6,92 @@ argument-hint: <branch-name>
 
 # Ship Changes
 
-Your job is the **intelligence** half of the ship process — analysis and judgment.
-The mechanics (branching, committing, pushing, PRs) are handled by `.claude/scripts/ship.sh`.
-The test gate fires automatically via `.claude/hooks/pre-ship.sh` before the script runs.
+Create branches, commit, push, and open PRs across all affected repos. Follow these conventions exactly.
 
 ## Arguments
 
-Parse from `$ARGUMENTS`: branch name (required, e.g. `ata/APP-297-pipeline-v2`).
-If missing, use `AskUserQuestion` to ask for it.
+Parse from `$ARGUMENTS`:
+- Branch name (required, e.g. `ata/APP-297-pipeline-v2`)
 
-## Your procedure
+If the branch name is missing, use `AskUserQuestion` to ask for it.
 
-### 1. Discover dirty repos
-Run `git status --short` in the parent, then `git -C <path> status --short` for each
-submodule. Identify repos with **tracked-file changes** — ignore `.DS_Store`-only diffs
-and repos with only untracked files.
+## Conventions
 
-### 2. Confirm which repos to ship
-If **more than one** repo has tracked-file changes, present the list and ask the user
-which ones to include in this ship. Do NOT assume all dirty repos should ship together —
-unrelated in-progress work in other submodules should not be swept into the same branch.
+### Branch
+- Use the exact branch name provided — do not modify it
+- Create from current HEAD in each repo
 
-If only **one** repo is dirty (or the user's request clearly names a single component),
-skip the prompt and proceed with that repo.
+### Staging
+- Run `git status` in each dirty repo to review all changes
+- Stage all modified and new files that are part of the work
+- **Delete any scratch files, one-off scripts, or temporary artifacts** created during the session before staging — don't leave local bloat behind
+- Trust `.gitignore` to handle the rest
 
-### 3. Rebase onto latest base branch
-Before branching, ensure each confirmed repo is based on the latest upstream. This
-prevents shipping stale code and avoids merge conflicts in PRs.
+### Commit Message
+- **Auto-generated** — run `git diff --cached` in each repo and analyze the staged diff to write the message
+- **Single line only** — no multi-line descriptions, no conventional commit prefixes (`chore:`, `feat:`, etc.)
+- **Present third-person tense** — e.g. "Migrates ship command to skills structure", "Adds OCR extraction step", "Fixes date parsing in event deduplicator"
+- Summarize the *what*, not the *why*
 
-For each confirmed **submodule repo**:
-```bash
-git -C <repo> fetch origin
-git -C <repo> stash        # stash dirty changes
-git -C <repo> checkout develop && git -C <repo> pull --ff-only origin develop
-git -C <repo> stash pop    # restore changes on top of latest develop
+### Pull Request
+- **Title**: Same as the commit message
+- **Body**: Use this template:
+
+```markdown
+## Summary
+<2-4 bullet points summarizing the changes at a high level>
+
+## Changes
+
+### <Component or Area>
+- <specific change>
+- <specific change>
+
+## Tests
+- <what test files were added/modified, or "No tests required — config/docs change">
+
+## Test plan
+- [ ] <feature-specific verification steps>
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
 ```
 
-For the **mono repo parent** (if it has changes):
-```bash
-git fetch origin
-git stash
-git checkout main && git pull --ff-only origin main
-git stash pop
-```
+- Base branch: `develop` for all submodule PRs. `main` for the mono repo PR.
+- Reviewers: always add `--reviewer ata-peppered,DexterW,jessicaribeiroalves,copilot` to every `gh pr create` call.
 
-If `stash pop` produces conflicts, stop and inform the user before proceeding.
+## Procedure
 
-### 4. Clean up scratch files
-Before staging anything, delete any temp files, one-off scripts, or artifacts you created
-during the session that are not part of the feature.
+### From the mono repo root (multi-repo ship)
 
-### 5. Analyse each selected repo
-Run `git diff` in each repo the user confirmed for this ship to understand what changed.
+1. **Discover scope**: Run `git status --short` in the parent, then `git -C <path> status --short` for each submodule. Build `DIRTY_SUBMODULES` (ignore `.DS_Store`-only diffs) and `PARENT_CHANGES`.
 
-### 6. Write a commit message per repo
-- **Single line only**
-- **Present third-person tense** — e.g. "Adds OCR extraction step", "Fixes date parsing in event deduplicator"
-- Summarise the *what*, not the *why*
-- Include ticket number if present in the branch name: `APP-297: Adds OCR extraction step`
-- **No co-author trailers** — do not append `Co-Authored-By` or any attribution lines
+2. **Confirm**: Print a summary of which repos have changes and what files are affected. Pause if anything looks unexpected.
 
-### 7. Write the plan file
-Create `.claude/tmp/ship-plan.json` with the branch and one message per confirmed repo:
+3. **For each dirty submodule**:
+   - `git status` and `git diff` to review changes
+   - Delete any scratch files or temp artifacts
+   - `git checkout -b <branch-name>` (or switch if already exists)
+   - Stage relevant files
+   - `git diff --cached` to analyze the staged diff
+   - Write a single-line, present third-person commit message from the diff
+   - Commit and push
+   - `gh pr create` with the title, detailed body, base `develop`, and `--reviewer ata-peppered,DexterW,jessicaribeiroalves,copilot`
 
-```json
-{
-  "branch": "<branch-name>",
-  "monoMessage": "<optional: commit message for the mono repo commit>",
-  "repos": [
-    { "name": "chrono-app",  "message": "<commit message>" },
-    { "name": "chrono-api",  "message": "<commit message>" }
-  ]
-}
-```
+4. **Update the mono repo** (always — ensure submodule refs point to latest):
+   - Run `git submodule update --remote --merge` to pull latest refs for all submodules
+   - Stage updated gitlinks and any changed root files (CLAUDE.md, .claude/, README.md)
+   - If nothing is staged after this, skip the mono repo PR
+   - `git diff --cached` to analyze
+   - Write a single-line commit message summarizing the platform-level changes
+   - Commit, push, `gh pr create` with base `main`, `--reviewer ata-peppered,DexterW,jessicaribeiroalves,copilot` — include links to all component PRs in the body
 
-- `repos`: only include repos that actually have tracked-file changes. Can be empty `[]` when changes are mono root only.
-- `monoMessage`: include when repos is empty or when the auto-generated message ("Updates submodule refs…") wouldn't describe the change accurately.
+5. **Report**: Print a summary table:
 
-### 8. Run the script
-```bash
-bash .claude/scripts/ship.sh
-```
+| Repo | Branch | PR |
+|---|---|---|
+| chrono-app | feature/APP-XXX | https://github.com/... |
+| chrono (mono) | feature/APP-XXX | https://github.com/... |
 
-The pre-ship hook fires automatically before this runs — it reads `ship-plan.json` and
-only runs tests for repos listed in the plan. Unrelated dirty repos are not tested.
+### From inside a single component directory
+
+Same procedure, single repo only. Skip step 4 entirely.
