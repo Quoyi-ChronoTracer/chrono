@@ -76,15 +76,58 @@ checked in (managed separately or not yet committed).
 
 ## CI/CD
 
-| Component | CI System | Triggers On | PR Gate? |
-|---|---|---|---|
-| chrono-app | GitHub Actions | `pull_request` | Yes (lint + test) |
-| chrono-api | CircleCI | `develop`, `staging`, `master` | No |
-| chrono-pipeline-v2 | CircleCI | `develop`, `staging`, `master` | No (Claude review on PR only) |
-| chrono-filter-ai-api | CircleCI | `develop`, `staging`, `master` | No |
-| chrono-devops | CircleCI | `develop`, `staging`, `master` | No |
+All environments deploy through the same event-driven cascade model.
 
-Deployments are branch-based: pushing to `staging` triggers staging deploy, `master` triggers prod.
+### Deploy Chain
+
+```
+Component repo event → notify-deploy.yml → mono repo deploy-<env>.yml → CircleCI pipelines
+```
+
+Each component repo has a `notify-deploy.yml` workflow that fires on:
+- **Branch push** (develop) → dispatches `develop-deploy` to mono repo
+- **RC tag push** (vX.Y.Z-rc.N) → dispatches `staging-deploy` to mono repo
+- **Stable tag push** (vX.Y.Z) → dispatches `production-deploy` to mono repo
+
+### Dependency Graph and Cascade
+
+All environments use the same tier ordering:
+- **Tier 0:** chrono-devops (infra) — downstream: all
+- **Tier 1:** chrono-api (backend) — downstream: tier 2
+- **Tier 2:** chrono-pipeline-v2, chrono-app, chrono-filter-ai-api (leaf nodes)
+
+The source repo determines cascade scope: devops cascades to all, api cascades to
+api + tier 2, edge services deploy only themselves.
+
+What differs per environment is **which version** downstream repos deploy:
+- **Develop:** HEAD of `develop` branch
+- **Staging:** repo's latest RC tag (looked up via GitHub API)
+- **Production:** repo's latest stable tag (looked up via GitHub API)
+
+If a downstream repo has no tag for the target environment, the cascade fails.
+
+### Promote Workflows
+
+Staging and production promotions are initiated via `workflow_dispatch`:
+- `promote-staging.yml` — validates RC tags, requires approval, pushes tags
+- `promote.yml` — validates stable tags, verifies RC prerequisite, requires approval, pushes tags
+
+Tag pushes trigger `notify-deploy.yml` in each component, which starts the cascade.
+The promote workflows do **not** trigger CircleCI directly.
+
+### CI Systems
+
+| Component | CI System | PR Gate? |
+|---|---|---|
+| chrono-app | GitHub Actions | Yes (lint + test) |
+| chrono-api | CircleCI | No |
+| chrono-pipeline-v2 | CircleCI | No (Claude review on PR only) |
+| chrono-filter-ai-api | CircleCI | No |
+| chrono-devops | CircleCI | No |
+
+### Tag Protection
+
+All 5 component repos have tag rulesets restricting `v*` tag pushes to Deploy Bot App only.
 
 ## References
 
