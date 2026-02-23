@@ -129,3 +129,5 @@ Before working in a component, read its doc for commands, architecture, and gotc
   _Load when reviewing PRs, adding API endpoints, modifying auth/access, or handling evidence data._
 - **Deployment Architecture** → `.claude/docs/deployment.md`
   _Load when working on infrastructure, auth, database, CI/CD, or cross-component integration._
+- **Data Flow** → `.claude/docs/data-flow.md`
+  _Load when working on cross-component integration, debugging data flow, or understanding how components connect._
