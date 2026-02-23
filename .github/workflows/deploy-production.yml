@@ -1,11 +1,11 @@
-name: Deploy Develop
+name: Deploy Production
 
 on:
   repository_dispatch:
-    types: [develop-deploy]
+    types: [production-deploy]
 
 concurrency:
-  group: develop-deploy-${{ github.event.client_payload.repo }}
+  group: production-deploy-${{ github.event.client_payload.repo }}
   cancel-in-progress: false
 
 jobs:
@@ -29,7 +29,7 @@ jobs:
         env:
           CIRCLECI_TOKEN: ${{ secrets.CIRCLECI_API_TOKEN }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          DEPLOY_ENV: develop
+          DEPLOY_ENV: production
           SOURCE_REPO: ${{ github.event.client_payload.repo }}
           SOURCE_REF: ${{ github.event.client_payload.ref }}
         run: |
@@ -39,25 +39,27 @@ jobs:
           # Tier 2: chrono-pipeline-v2, chrono-app, chrono-filter-ai-api (edge) — leaf nodes
           #
           # Deploy the source repo + everything downstream of it.
+          # Source repo uses the tag from the dispatch payload.
+          # Downstream repos use their latest stable tag (looked up via GitHub API).
 
           echo "Source repo: ${SOURCE_REPO}"
-          echo "Source ref: ${SOURCE_REF:-develop}"
+          echo "Source ref: ${SOURCE_REF}"
+
+          # Stable tag pattern: vX.Y.Z with no suffix
+          TAG_PATTERN='^v[0-9]+\.[0-9]+\.[0-9]+$'
 
           case "$SOURCE_REPO" in
             chrono-devops)
-              # Infra changed — deploy everything
               TIER_0=("chrono-devops")
               TIER_1=("chrono-api")
               TIER_2=("chrono-pipeline-v2" "chrono-app" "chrono-filter-ai-api")
               ;;
             chrono-api)
-              # Backend changed — deploy api + all edge services
               TIER_0=()
               TIER_1=("chrono-api")
               TIER_2=("chrono-pipeline-v2" "chrono-app" "chrono-filter-ai-api")
               ;;
             chrono-pipeline-v2|chrono-app|chrono-filter-ai-api)
-              # Edge service changed — deploy only that service
               TIER_0=()
               TIER_1=()
               TIER_2=("$SOURCE_REPO")
@@ -68,17 +70,35 @@ jobs:
               ;;
           esac
 
+          # --- Helper: look up latest stable tag for a repo ---
+          lookup_latest_stable_tag() {
+            local repo="$1"
+
+            LATEST_TAG=$(curl -s -H "Authorization: token ${GH_TOKEN}" \
+              "https://api.github.com/repos/Quoyi-ChronoTracer/${repo}/git/matching-refs/tags/v" | \
+              jq -r '.[].ref' | sed 's|refs/tags/||' | \
+              grep -E "$TAG_PATTERN" | sort -V | tail -1)
+
+            if [ -z "$LATEST_TAG" ]; then
+              echo "::error::No stable tag found for ${repo} — cannot cascade to production"
+              return 1
+            fi
+
+            echo "$LATEST_TAG"
+          }
+
           # --- Helper: trigger a repo and create GitHub Deployment ---
           trigger_repo() {
             local repo="$1"
+            local tag="$2"
 
-            echo "[TRIGGER] $repo @ develop"
+            echo "[TRIGGER] $repo @ $tag"
 
             HTTP_CODE=$(curl -s -o /tmp/cci_${repo}.json -w "%{http_code}" \
               -X POST "https://circleci.com/api/v2/project/gh/Quoyi-ChronoTracer/${repo}/pipeline" \
               -H "Circle-Token: ${CIRCLECI_TOKEN}" \
               -H "Content-Type: application/json" \
-              -d "{\"branch\": \"develop\", \"parameters\": {\"trigger_deploy\": true}}")
+              -d "{\"tag\": \"${tag}\", \"parameters\": {\"trigger_deploy\": true}}")
 
             if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
               echo "::error::Failed to trigger CircleCI for $repo (HTTP $HTTP_CODE)"
@@ -95,12 +115,12 @@ jobs:
               "https://api.github.com/repos/Quoyi-ChronoTracer/${repo}/deployments" \
               -H "Authorization: token ${GH_TOKEN}" \
               -H "Accept: application/vnd.github+json" \
-              -d "$(jq -n --arg env "$DEPLOY_ENV" '{
-                ref: "develop",
+              -d "$(jq -n --arg ref "$tag" --arg env "$DEPLOY_ENV" '{
+                ref: $ref,
                 environment: $env,
                 auto_merge: false,
                 required_contexts: [],
-                description: "Deployment via develop deploy workflow"
+                description: "Deployment via production deploy cascade"
               }')")
 
             local deployment_id=$(echo "$deploy_response" | jq -r '.id')
@@ -250,7 +270,15 @@ jobs:
 
             # Trigger all repos in this tier
             for repo in "${tier_repos[@]}"; do
-              trigger_repo "$repo" || exit 1
+              if [ "$repo" = "$SOURCE_REPO" ]; then
+                # Source repo: use the tag from the dispatch payload
+                TAG="$SOURCE_REF"
+              else
+                # Downstream repo: look up latest stable tag
+                TAG=$(lookup_latest_stable_tag "$repo") || exit 1
+              fi
+
+              trigger_repo "$repo" "$TAG" || exit 1
               ALL_TRIGGERED+=("$repo")
             done
 

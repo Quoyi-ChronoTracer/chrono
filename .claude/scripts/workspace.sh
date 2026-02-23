@@ -82,14 +82,21 @@ cmd_create() {
     # Fetch so we can see remote branches
     git -C "$sub_main" fetch --quiet 2>/dev/null || true
 
-    # 3-tier fallback: local branch → remote branch → new from HEAD
+    # Determine the base ref: origin/develop if it exists, otherwise HEAD.
+    # Submodule PRs target develop, so new branches must start from its tip
+    # to avoid conflicts caused by stale gitlink commits.
+    local base_ref="HEAD"
+    if git -C "$sub_main" rev-parse --verify "origin/develop" &>/dev/null; then
+      base_ref="origin/develop"
+    fi
+
+    # 3-tier fallback: local branch → remote branch → new from base_ref
     if git -C "$sub_main" rev-parse --verify "$name" &>/dev/null; then
       # Branch exists locally — check if it's already checked out in another worktree
       if git -C "$sub_main" worktree add "$sub_ws" "$name" 2>/dev/null; then
         ok "$sub (existing local branch)"
       else
-        # Branch is checked out elsewhere — create a detached worktree won't work,
-        # so create with a workspace-scoped branch name instead
+        # Branch is checked out elsewhere — create with a workspace-scoped name
         local ws_branch="ws/${name}/${sub}"
         git -C "$sub_main" worktree add -b "$ws_branch" "$sub_ws" "$name"
         ok "$sub (new branch '$ws_branch' from '$name')"
@@ -98,8 +105,8 @@ cmd_create() {
       git -C "$sub_main" worktree add --track -b "$name" "$sub_ws" "origin/$name"
       ok "$sub (tracking origin/$name)"
     else
-      git -C "$sub_main" worktree add -b "$name" "$sub_ws"
-      ok "$sub (new branch from HEAD)"
+      git -C "$sub_main" worktree add -b "$name" "$sub_ws" "$base_ref"
+      ok "$sub (new branch from ${base_ref})"
     fi
   done
 
