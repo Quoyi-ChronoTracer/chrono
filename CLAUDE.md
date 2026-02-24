@@ -63,7 +63,7 @@ Commit messages: `APP-XXX: Short description in present third-person tense`
 - `APP-297: Adds pipeline v2 OCR extraction step`
 - `APP-123: Fixes event deduplication for overlapping time ranges`
 
-PRs always target `develop` in each component repo.
+**Never push directly to `develop` or `main`.** Always create a feature branch, commit there, and open a PR targeting `develop`.
 
 ---
 
